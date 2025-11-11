@@ -133,49 +133,6 @@ pipeline {
                 '''
             }
         }
-                    
-                    if (!backendHealthy) {
-                        echo '✗ Backend failed to become healthy within timeout'
-                        sh 'docker-compose logs backend'
-                        sh 'docker-compose ps'
-                        error('Backend did not become healthy within 100 seconds')
-                    }
-                    
-                    // Wait for frontend health check
-                    def frontendHealthy = false
-                    retryCount = 0
-                    
-                    while (retryCount < maxRetries && !frontendHealthy) {
-                        sleep(5)
-                        
-                        def frontendStatus = sh(
-                            script: 'docker inspect soundplus-frontend --format="{{.State.Health.Status}}" 2>/dev/null || echo "not-found"',
-                            returnStdout: true
-                        ).trim()
-                        
-                        echo "Frontend health status (attempt ${retryCount + 1}/${maxRetries}): ${frontendStatus}"
-                        
-                        if (frontendStatus == 'healthy') {
-                            frontendHealthy = true
-                            echo '✓ Frontend is healthy'
-                        } else if (frontendStatus == 'unhealthy') {
-                            echo '✗ Frontend is unhealthy. Checking logs...'
-                            sh 'docker-compose logs --tail=50 frontend'
-                            error('Frontend container failed health check')
-                        }
-                        
-                        retryCount++
-                    }
-                    
-                    if (!frontendHealthy) {
-                        echo '✗ Frontend failed to become healthy within timeout'
-                        sh 'docker-compose logs frontend'
-                        sh 'docker-compose ps'
-                        error('Frontend did not become healthy within 100 seconds')
-                    }
-                }
-            }
-        }
 
         stage('Verify Services') {
             steps {
