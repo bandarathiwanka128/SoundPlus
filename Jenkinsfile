@@ -74,10 +74,7 @@ pipeline {
         
         // Docker Hub settings
         DOCKER_REGISTRY = 'docker.io'
-        DOCKER_USERNAME = credentials('dockerhub-username')
-        DOCKER_PASSWORD = credentials('dockerhub-password')
-        
-        // Image names
+        DOCKER_USERNAME = 'thiwanka14535'
         BACKEND_IMAGE = "${DOCKER_USERNAME}/soundplus-backend"
         FRONTEND_IMAGE = "${DOCKER_USERNAME}/soundplus-frontend"
         
@@ -303,36 +300,38 @@ pipeline {
             }
             steps {
                 echo '=== Pushing Images to Docker Hub ==='
-                script {
-                    try {
-                        sh '''
-                            echo "Logging in to Docker Hub..."
-                            echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-                            
-                            echo ""
-                            echo "Tagging and pushing backend image..."
-                            docker tag soundplus-backend:latest ${BACKEND_IMAGE}:latest
-                            docker tag soundplus-backend:latest ${BACKEND_IMAGE}:${BUILD_TAG}
-                            docker push ${BACKEND_IMAGE}:latest
-                            docker push ${BACKEND_IMAGE}:${BUILD_TAG}
-                            echo "✓ Backend image pushed successfully"
-                            
-                            echo ""
-                            echo "Tagging and pushing frontend image..."
-                            docker tag soundplus-frontend:latest ${FRONTEND_IMAGE}:latest
-                            docker tag soundplus-frontend:latest ${FRONTEND_IMAGE}:${BUILD_TAG}
-                            docker push ${FRONTEND_IMAGE}:latest
-                            docker push ${FRONTEND_IMAGE}:${BUILD_TAG}
-                            echo "✓ Frontend image pushed successfully"
-                            
-                            echo ""
-                            echo "Logging out from Docker Hub..."
-                            docker logout
-                            echo "✓ Push to Docker Hub completed"
-                        '''
-                    } catch (Exception e) {
-                        echo "⚠ Warning: Docker Hub push failed - ${e.message}"
-                        echo "Pipeline will continue, but images were not pushed"
+                withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    script {
+                        try {
+                            sh '''
+                                echo "Logging in to Docker Hub..."
+                                echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                                
+                                echo ""
+                                echo "Tagging and pushing backend image..."
+                                docker tag soundplus-backend:latest $DOCKER_USER/soundplus-backend:latest
+                                docker tag soundplus-backend:latest $DOCKER_USER/soundplus-backend:${BUILD_TAG}
+                                docker push $DOCKER_USER/soundplus-backend:latest
+                                docker push $DOCKER_USER/soundplus-backend:${BUILD_TAG}
+                                echo "✓ Backend image pushed successfully"
+                                
+                                echo ""
+                                echo "Tagging and pushing frontend image..."
+                                docker tag soundplus-frontend:latest $DOCKER_USER/soundplus-frontend:latest
+                                docker tag soundplus-frontend:latest $DOCKER_USER/soundplus-frontend:${BUILD_TAG}
+                                docker push $DOCKER_USER/soundplus-frontend:latest
+                                docker push $DOCKER_USER/soundplus-frontend:${BUILD_TAG}
+                                echo "✓ Frontend image pushed successfully"
+                                
+                                echo ""
+                                echo "Logging out from Docker Hub..."
+                                docker logout
+                                echo "✓ Push to Docker Hub completed"
+                            '''
+                        } catch (Exception e) {
+                            echo "⚠ Warning: Docker Hub push failed - ${e.message}"
+                            echo "Pipeline will continue, but images were not pushed"
+                        }
                     }
                 }
             }
