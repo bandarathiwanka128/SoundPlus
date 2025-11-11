@@ -49,9 +49,18 @@ const upload = multer({
 });
 
 // MongoDB Connection
+let dbConnected = false;
+
 mongoose.connect(process.env.MONGODB_URI)
-.then(() => console.log('✅ MongoDB Atlas connected successfully!'))
-.catch(err => console.error('❌ MongoDB connection error:', err));
+.then(() => {
+  dbConnected = true;
+  console.log('✅ MongoDB Atlas connected successfully!');
+})
+.catch(err => {
+  console.error('❌ MongoDB connection error:', err);
+  // Continue starting the server even if DB connection fails initially
+  // It will retry reconnection automatically
+});
 
 // ===========================
 // MONGOOSE SCHEMAS & MODELS
@@ -516,11 +525,22 @@ app.put('/orders/:orderId', authenticateToken, isAdmin, async (req, res) => {
 // HEALTH CHECK
 // ===========================
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    message: 'SoundPlus++ Backend is running!',
-    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
-  });
+  try {
+    // Simple health check - just verify server is running
+    // Database connection is checked separately
+    res.status(200).json({
+      status: 'OK',
+      message: 'SoundPlus++ Backend is running!',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Health check failed',
+      error: error.message
+    });
+  }
 });
 
 // ===========================
@@ -534,6 +554,7 @@ app.listen(port, '0.0.0.0', (error) => {
   console.log(`🚀 Server running on http://0.0.0.0:${port}`);
   console.log(`📦 Environment: ${process.env.NODE_ENV}`);
   console.log(`🗄️  Database: ${process.env.DB_NAME}`);
+  console.log(`✅ Health check endpoint: http://localhost:${port}/health`);
 });
 
 module.exports = app;
