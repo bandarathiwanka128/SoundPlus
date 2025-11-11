@@ -10,8 +10,8 @@ WORKDIR /usr/src/app
 # Copy package files
 COPY package.json ./
 
-# Install dependencies - with detailed output
-RUN npm install 2>&1
+# Install dependencies - FORCE if needed
+RUN npm ci --force 2>&1 || npm install --force 2>&1
 
 # Copy application files
 COPY . .

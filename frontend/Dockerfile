@@ -10,8 +10,8 @@ WORKDIR /usr/app
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install dependencies with verbose output
-RUN npm install --verbose && npm cache clean --force
+# Install ALL dependencies (including devDependencies for Vite)
+RUN npm ci --force 2>&1 || npm install --force 2>&1
 
 # Copy application files
 COPY . .
