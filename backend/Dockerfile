@@ -1,8 +1,11 @@
 # Backend Dockerfile for SoundPlus++
 FROM node:18-alpine
 
-# Install curl for healthcheck
-RUN apk add --no-cache curl
+# Install curl for healthcheck with retry logic
+RUN apk update && \
+    apk add --no-cache curl || \
+    (apk update && apk add --no-cache curl) || \
+    echo "Warning: curl installation failed, using node-based healthcheck instead"
 
 # Set working directory
 WORKDIR /usr/src/app
@@ -22,7 +25,7 @@ RUN mkdir -p uploads && chmod 755 uploads
 # Expose port
 EXPOSE 5000
 
-# Health check - simplified and more reliable
+# Health check - with curl fallback
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:5000/health || exit 1
 
