@@ -354,12 +354,14 @@ pipeline {
 
     post {
         always {
-            echo '=== Cleanup ==='
-            sh '''
-                docker-compose logs --tail=50 || true
-                docker-compose ps || true
-                docker-compose down -v || true
-            '''
+            node {
+                echo '=== Cleanup ==='
+                sh '''
+                    docker-compose logs --tail=50 || true
+                    docker-compose ps || true
+                    docker-compose down -v || true
+                '''
+            }
         }
         success {
             echo '✓ Pipeline completed successfully!'
