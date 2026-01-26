@@ -26,5 +26,5 @@ ENV NODE_ENV=production
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
   CMD curl -f http://localhost:3000 || exit 1
 
-# Start the development server (config in vite.config.js)
-CMD ["npm", "run", "dev"]
+# Start the development server with proper host binding for Docker
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

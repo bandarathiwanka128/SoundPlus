@@ -10,7 +10,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main', 
-                url: 'https://github.com/Thiwankabanadara5400/Soundplus.git'
+                url: 'https://github.com/bandarathiwanka128/SoundPlus.git'
             }
         }
 
@@ -37,10 +37,12 @@ pipeline {
                     echo "Creating backend .env file..."
                     echo "NODE_ENV=production" > backend/.env
                     echo "PORT=5000" >> backend/.env
-                    echo "MONGODB_URI=mongodb+srv://your_username:your_password@your_cluster.mongodb.net/soundplus?retryWrites=true&w=majority" >> backend/.env
-                    echo "JWT_SECRET=your_jwt_secret_key_here" >> backend/.env
+                    echo "MONGODB_URI=mongodb+srv://thiwankaofficial5400_db_user:AbSaPGrmL6tFbgKa@cluster0.wtz0zfg.mongodb.net/Sound_lk?retryWrites=true&w=majority" >> backend/.env
+                    echo "DB_NAME=Sound_lk" >> backend/.env
+                    echo "JWT_SECRET=soundplus_secret_key_2025" >> backend/.env
                     echo "BACKEND_URL=http://localhost:5000" >> backend/.env
                     echo "FRONTEND_URL=http://localhost:3000" >> backend/.env
+                    echo "CORS_ORIGIN=http://localhost:3000" >> backend/.env
 
                     echo "Creating frontend .env file..."
                     echo "VITE_API_URL=http://localhost:5000" > frontend/.env
