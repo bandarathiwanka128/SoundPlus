@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://51.21.64.104:5000'
 
 const Cart = ({ user, setCartCount }) => {
   const [cartItems, setCartItems] = useState([])
@@ -89,7 +89,7 @@ const Cart = ({ user, setCartCount }) => {
                 }}
               >
                 <img
-                  src={item.productId?.image}
+                  src={`${API_URL}${item.productId?.image}`}
                   alt={item.productId?.name}
                   style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '10px' }}
                 />
@@ -107,7 +107,7 @@ const Cart = ({ user, setCartCount }) => {
             ))}
             <div style={{ marginTop: '2rem', textAlign: 'right' }}>
               <h2>Total: ${calculateTotal()}</h2>
-              <button className="btn btn-primary btn-lg" style={{ marginTop: '1rem' }}>
+              <button className="btn btn-primary btn-lg" style={{ marginTop: '1rem' }} onClick={() => navigate('/checkout')}>
                 Proceed to Checkout
               </button>
             </div>

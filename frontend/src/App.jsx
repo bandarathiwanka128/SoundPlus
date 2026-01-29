@@ -6,6 +6,8 @@ import Home from './pages/Home'
 import Products from './pages/Products'
 import ProductDetail from './pages/ProductDetail'
 import Cart from './pages/Cart'
+import Checkout from './pages/Checkout'
+import OrderSuccess from './pages/OrderSuccess'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import AdminDashboard from './pages/AdminDashboard'
@@ -33,6 +35,8 @@ function App() {
           <Route path="/products" element={<Products />} />
           <Route path="/products/:id" element={<ProductDetail user={user} setCartCount={setCartCount} />} />
           <Route path="/cart" element={<Cart user={user} setCartCount={setCartCount} />} />
+          <Route path="/checkout" element={<Checkout user={user} />} />
+          <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/login" element={<Login setUser={setUser} />} />
           <Route path="/register" element={<Register setUser={setUser} />} />
           <Route path="/admin" element={<AdminDashboard user={user} />} />

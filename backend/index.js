@@ -9,13 +9,41 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const Stripe = require('stripe');
 
 const app = express();
-const port = process.env.PORT || 4000;
+const port = process.env.PORT || 5000;
+
+// Initialize Stripe (with error handling)
+let stripe = null;
+try {
+  if (process.env.STRIPE_SECRET_KEY) {
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    console.log('Stripe initialized successfully');
+  } else {
+    console.warn('WARNING: STRIPE_SECRET_KEY not set. Payment features will be disabled.');
+  }
+} catch (error) {
+  console.error('Stripe initialization error:', error.message);
+}
 
 // Middleware setup
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  process.env.CORS_ORIGIN
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, true); // Allow all for development
+  },
   credentials: true
 }));
 app.use(bodyParser.json());
@@ -54,12 +82,12 @@ let dbConnected = false;
 mongoose.connect(process.env.MONGODB_URI)
 .then(() => {
   dbConnected = true;
-  console.log('✅ MongoDB Atlas connected successfully!');
+  console.log('MongoDB Atlas connected successfully!');
+  // Seed admin user after DB connection
+  seedAdminUser();
 })
 .catch(err => {
-  console.error('❌ MongoDB connection error:', err);
-  // Continue starting the server even if DB connection fails initially
-  // It will retry reconnection automatically
+  console.error('MongoDB connection error:', err);
 });
 
 // ===========================
@@ -72,6 +100,16 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['user', 'admin'], default: 'user' },
+  createdAt: { type: Date, default: Date.now }
+});
+
+// Category Schema
+const categorySchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  description: { type: String, default: '' },
+  image: { type: String, default: '' },
+  isActive: { type: Boolean, default: true },
+  order: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -93,11 +131,12 @@ const productSchema = new mongoose.Schema({
   connectivity: { type: String, enum: ['wired', 'wireless', 'bluetooth', 'usb'], required: true },
   features: { type: [String], default: [] },
   color: { type: String, default: 'Black' },
-  batteryLife: { type: String }, // For wireless products
+  batteryLife: { type: String },
   noiseCancellation: { type: Boolean, default: false },
   microphone: { type: Boolean, default: false },
   rating: { type: Number, default: 0, min: 0, max: 5 },
   reviews: { type: Number, default: 0 },
+  isVisible: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -133,14 +172,84 @@ const orderSchema = new mongoose.Schema({
     postalCode: String,
     phone: String
   },
+  paymentIntentId: { type: String },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'failed'],
+    default: 'pending'
+  },
+  paymentMethod: { type: String, default: 'card' },
   createdAt: { type: Date, default: Date.now }
 });
 
 // Create Models
 const User = mongoose.model('User', userSchema);
+const Category = mongoose.model('Category', categorySchema);
 const Product = mongoose.model('Product', productSchema);
 const Cart = mongoose.model('Cart', cartSchema);
 const Order = mongoose.model('Order', orderSchema);
+
+// ===========================
+// SEED ADMIN USER
+// ===========================
+async function seedAdminUser() {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
+    if (!adminEmail || !adminPassword) {
+      console.log('Admin credentials not configured in .env');
+      return;
+    }
+
+    const existingAdmin = await User.findOne({ email: adminEmail });
+
+    if (!existingAdmin) {
+      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      const admin = new User({
+        username: 'admin',
+        email: adminEmail,
+        password: hashedPassword,
+        role: 'admin'
+      });
+      await admin.save();
+      console.log('Admin user created successfully!');
+    } else {
+      console.log('Admin user already exists');
+    }
+  } catch (error) {
+    console.error('Error seeding admin user:', error);
+  }
+}
+
+// ===========================
+// SEED DEFAULT CATEGORIES
+// ===========================
+async function seedCategories() {
+  try {
+    const defaultCategories = [
+      { name: 'headphones', description: 'Over-ear and on-ear headphones', order: 1 },
+      { name: 'earbuds', description: 'True wireless earbuds', order: 2 },
+      { name: 'earphones', description: 'In-ear earphones', order: 3 },
+      { name: 'wireless', description: 'Wireless audio devices', order: 4 },
+      { name: 'wired', description: 'Wired audio devices', order: 5 },
+      { name: 'gaming', description: 'Gaming headsets', order: 6 },
+      { name: 'studio', description: 'Professional studio monitors', order: 7 },
+      { name: 'sports', description: 'Sports and fitness audio', order: 8 }
+    ];
+
+    for (const cat of defaultCategories) {
+      await Category.findOneAndUpdate(
+        { name: cat.name },
+        cat,
+        { upsert: true, new: true }
+      );
+    }
+    console.log('Categories seeded successfully!');
+  } catch (error) {
+    console.error('Error seeding categories:', error);
+  }
+}
 
 // ===========================
 // MIDDLEWARE - AUTH
@@ -174,16 +283,13 @@ app.post('/register', async (req, res) => {
   try {
     const { username, email, password, role } = req.body;
 
-    // Check if user exists
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists' });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create new user
     const newUser = new User({
       username,
       email,
@@ -204,19 +310,16 @@ app.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // Check password
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // Create token
     const token = jwt.sign(
       { userId: user._id, role: user.role },
       process.env.JWT_SECRET,
@@ -247,14 +350,217 @@ app.post('/logout', (req, res) => {
 });
 
 // ===========================
+// STRIPE PAYMENT ROUTES
+// ===========================
+
+// Get Stripe publishable key
+app.get('/payment-config', (req, res) => {
+  res.json({
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY
+  });
+});
+
+// Create payment intent
+app.post('/create-payment-intent', authenticateToken, async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ message: 'Payment system not configured' });
+    }
+
+    const { amount, currency = 'usd' } = req.body;
+    console.log('Creating payment intent for amount:', amount);
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100), // Convert to cents
+      currency,
+      automatic_payment_methods: {
+        enabled: true,
+      },
+    });
+
+    console.log('Payment intent created:', paymentIntent.id);
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id
+    });
+  } catch (error) {
+    console.error('Payment intent error:', error);
+    res.status(500).json({ message: error.message || 'Error creating payment intent' });
+  }
+});
+
+// Confirm payment and create order
+app.post('/confirm-payment', authenticateToken, async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ message: 'Payment system not configured' });
+    }
+
+    const { paymentIntentId, userId, items, totalAmount, shippingAddress } = req.body;
+    console.log('Confirming payment:', paymentIntentId);
+
+    // Verify payment status with Stripe
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({
+        message: 'Payment not completed',
+        status: paymentIntent.status
+      });
+    }
+
+    // Create order with payment info
+    const newOrder = new Order({
+      userId,
+      items,
+      totalAmount,
+      shippingAddress,
+      status: 'processing',
+      paymentIntentId,
+      paymentStatus: 'paid',
+      paymentMethod: 'card'
+    });
+
+    await newOrder.save();
+
+    // Clear cart after successful order
+    await Cart.deleteMany({ userId });
+
+    // Update product stock
+    for (const item of items) {
+      await Product.findByIdAndUpdate(
+        item.productId,
+        { $inc: { available: -item.quantity } }
+      );
+    }
+
+    res.status(201).json({
+      message: 'Order placed successfully',
+      order: newOrder
+    });
+  } catch (error) {
+    console.error('Confirm payment error:', error);
+    res.status(500).json({ message: 'Error confirming payment' });
+  }
+});
+
+// ===========================
+// CATEGORY ROUTES
+// ===========================
+
+// Get all categories
+app.get('/categories', async (req, res) => {
+  try {
+    const { activeOnly } = req.query;
+    const filter = activeOnly === 'true' ? { isActive: true } : {};
+    const categories = await Category.find(filter).sort({ order: 1 });
+    res.json(categories);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ message: 'Error fetching categories' });
+  }
+});
+
+// Get single category
+app.get('/categories/:id', async (req, res) => {
+  try {
+    const category = await Category.findById(req.params.id);
+    if (!category) {
+      return res.status(404).json({ message: 'Category not found' });
+    }
+    res.json(category);
+  } catch (error) {
+    console.error('Error fetching category:', error);
+    res.status(500).json({ message: 'Error fetching category' });
+  }
+});
+
+// Create category (Admin only)
+app.post('/categories', authenticateToken, isAdmin, upload.single('image'), async (req, res) => {
+  try {
+    const { name, description, isActive, order } = req.body;
+
+    const existingCategory = await Category.findOne({ name });
+    if (existingCategory) {
+      return res.status(400).json({ message: 'Category already exists' });
+    }
+
+    const newCategory = new Category({
+      name,
+      description,
+      image: req.file ? `/uploads/${req.file.filename}` : '',
+      isActive: isActive !== 'false',
+      order: order || 0
+    });
+
+    await newCategory.save();
+    res.status(201).json({ message: 'Category created successfully', category: newCategory });
+  } catch (error) {
+    console.error('Error creating category:', error);
+    res.status(500).json({ message: 'Error creating category' });
+  }
+});
+
+// Update category (Admin only)
+app.put('/categories/:id', authenticateToken, isAdmin, upload.single('image'), async (req, res) => {
+  try {
+    const updateData = { ...req.body };
+
+    if (req.file) {
+      updateData.image = `/uploads/${req.file.filename}`;
+    }
+
+    if (updateData.isActive !== undefined) {
+      updateData.isActive = updateData.isActive !== 'false';
+    }
+
+    const category = await Category.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    );
+
+    if (!category) {
+      return res.status(404).json({ message: 'Category not found' });
+    }
+
+    res.json({ message: 'Category updated successfully', category });
+  } catch (error) {
+    console.error('Error updating category:', error);
+    res.status(500).json({ message: 'Error updating category' });
+  }
+});
+
+// Delete category (Admin only)
+app.delete('/categories/:id', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const category = await Category.findByIdAndDelete(req.params.id);
+
+    if (!category) {
+      return res.status(404).json({ message: 'Category not found' });
+    }
+
+    res.json({ message: 'Category deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    res.status(500).json({ message: 'Error deleting category' });
+  }
+});
+
+// ===========================
 // PRODUCT ROUTES
 // ===========================
 
-// Get all products
+// Get all products (with visibility filter for non-admin)
 app.get('/products', async (req, res) => {
   try {
-    const { category, brand, minPrice, maxPrice, search } = req.query;
+    const { category, brand, minPrice, maxPrice, search, showAll } = req.query;
     let filter = {};
+
+    // Only show visible products to regular users
+    if (showAll !== 'true') {
+      filter.isVisible = true;
+    }
 
     if (category) filter.category = category;
     if (brand) filter.brand = brand;
@@ -299,7 +605,8 @@ app.post('/add-product', authenticateToken, isAdmin, upload.single('image'), asy
     const productData = {
       ...req.body,
       image: req.file ? `/uploads/${req.file.filename}` : '',
-      features: req.body.features ? JSON.parse(req.body.features) : []
+      features: req.body.features ? JSON.parse(req.body.features) : [],
+      isVisible: req.body.isVisible !== 'false'
     };
 
     const newProduct = new Product(productData);
@@ -324,6 +631,10 @@ app.put('/update-product/:id', authenticateToken, isAdmin, upload.single('image'
       updateData.features = JSON.parse(req.body.features);
     }
 
+    if (updateData.isVisible !== undefined) {
+      updateData.isVisible = updateData.isVisible !== 'false';
+    }
+
     const product = await Product.findByIdAndUpdate(
       req.params.id,
       updateData,
@@ -338,6 +649,25 @@ app.put('/update-product/:id', authenticateToken, isAdmin, upload.single('image'
   } catch (error) {
     console.error('Error updating product:', error);
     res.status(500).json({ message: 'Error updating product' });
+  }
+});
+
+// Toggle product visibility (Admin only)
+app.put('/products/:id/visibility', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    product.isVisible = !product.isVisible;
+    await product.save();
+
+    res.json({ message: 'Product visibility updated', product });
+  } catch (error) {
+    console.error('Error updating visibility:', error);
+    res.status(500).json({ message: 'Error updating visibility' });
   }
 });
 
@@ -386,7 +716,6 @@ app.post('/add-to-cart', authenticateToken, async (req, res) => {
   try {
     const { userId, productId, quantity } = req.body;
 
-    // Check if item already in cart
     const existingItem = await Cart.findOne({ userId, productId });
 
     if (existingItem) {
@@ -462,7 +791,8 @@ app.post('/orders', authenticateToken, async (req, res) => {
       items,
       totalAmount,
       shippingAddress,
-      status: 'pending'
+      status: 'pending',
+      paymentStatus: 'pending'
     });
 
     await newOrder.save();
@@ -492,7 +822,19 @@ app.get('/orders/:userId', authenticateToken, async (req, res) => {
 // Get all orders (Admin only)
 app.get('/orders', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const orders = await Order.find().populate('userId', 'username email').sort({ createdAt: -1 });
+    const { status, startDate, endDate } = req.query;
+    let filter = {};
+
+    if (status) filter.status = status;
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) filter.createdAt.$gte = new Date(startDate);
+      if (endDate) filter.createdAt.$lte = new Date(endDate);
+    }
+
+    const orders = await Order.find(filter)
+      .populate('userId', 'username email')
+      .sort({ createdAt: -1 });
     res.json(orders);
   } catch (error) {
     console.error('Error fetching orders:', error);
@@ -522,12 +864,138 @@ app.put('/orders/:orderId', authenticateToken, isAdmin, async (req, res) => {
 });
 
 // ===========================
+// ADMIN DASHBOARD ROUTES
+// ===========================
+
+// Get admin dashboard stats
+app.get('/admin/stats', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments({ role: 'user' });
+    const totalProducts = await Product.countDocuments();
+    const totalOrders = await Order.countDocuments();
+    const totalCategories = await Category.countDocuments();
+
+    // Calculate total revenue
+    const revenueResult = await Order.aggregate([
+      { $match: { paymentStatus: 'paid' } },
+      { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+    ]);
+    const totalRevenue = revenueResult[0]?.total || 0;
+
+    // Get recent orders count (last 7 days)
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const recentOrders = await Order.countDocuments({ createdAt: { $gte: weekAgo } });
+
+    // Order status breakdown
+    const ordersByStatus = await Order.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+
+    // Revenue by day (last 7 days)
+    const revenueByDay = await Order.aggregate([
+      { $match: { createdAt: { $gte: weekAgo }, paymentStatus: 'paid' } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          revenue: { $sum: '$totalAmount' },
+          orders: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    res.json({
+      totalUsers,
+      totalProducts,
+      totalOrders,
+      totalCategories,
+      totalRevenue,
+      recentOrders,
+      ordersByStatus,
+      revenueByDay
+    });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ message: 'Error fetching dashboard stats' });
+  }
+});
+
+// Get all users (Admin only)
+app.get('/admin/users', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const { search, role } = req.query;
+    let filter = {};
+
+    if (role) filter.role = role;
+    if (search) {
+      filter.$or = [
+        { username: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const users = await User.find(filter)
+      .select('-password')
+      .sort({ createdAt: -1 });
+
+    // Add order count for each user
+    const usersWithStats = await Promise.all(users.map(async (user) => {
+      const orderCount = await Order.countDocuments({ userId: user._id });
+      const cartCount = await Cart.countDocuments({ userId: user._id });
+      return {
+        ...user.toObject(),
+        orderCount,
+        cartCount
+      };
+    }));
+
+    res.json(usersWithStats);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ message: 'Error fetching users' });
+  }
+});
+
+// Get all carts (Admin only)
+app.get('/admin/carts', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const carts = await Cart.find()
+      .populate('userId', 'username email')
+      .populate('productId', 'name price image')
+      .sort({ createdAt: -1 });
+
+    // Group by user
+    const cartsByUser = carts.reduce((acc, item) => {
+      const userId = item.userId?._id?.toString();
+      if (!userId) return acc;
+
+      if (!acc[userId]) {
+        acc[userId] = {
+          user: item.userId,
+          items: [],
+          totalValue: 0
+        };
+      }
+      acc[userId].items.push(item);
+      if (item.productId?.price) {
+        acc[userId].totalValue += item.productId.price * item.quantity;
+      }
+      return acc;
+    }, {});
+
+    res.json(Object.values(cartsByUser));
+  } catch (error) {
+    console.error('Error fetching carts:', error);
+    res.status(500).json({ message: 'Error fetching carts' });
+  }
+});
+
+// ===========================
 // HEALTH CHECK
 // ===========================
 app.get('/health', (req, res) => {
   try {
-    // Simple health check - just verify server is running
-    // Database connection is checked separately
     res.status(200).json({
       status: 'OK',
       message: 'SoundPlus++ Backend is running!',
@@ -551,10 +1019,10 @@ app.listen(port, '0.0.0.0', (error) => {
     console.error('Error starting server:', error);
     process.exit(1);
   }
-  console.log(`🚀 Server running on http://0.0.0.0:${port}`);
-  console.log(`📦 Environment: ${process.env.NODE_ENV}`);
-  console.log(`🗄️  Database: ${process.env.DB_NAME}`);
-  console.log(`✅ Health check endpoint: http://localhost:${port}/health`);
+  console.log(`Server running on http://0.0.0.0:${port}`);
+  console.log(`Environment: ${process.env.NODE_ENV}`);
+  console.log(`Database: ${process.env.DB_NAME}`);
+  console.log(`Health check endpoint: http://localhost:${port}/health`);
 });
 
 module.exports = app;

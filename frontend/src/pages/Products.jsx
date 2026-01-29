@@ -4,7 +4,7 @@ import axios from 'axios'
 import ProductCard from '../components/ProductCard'
 import './Products.css'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://51.21.64.104:5000'
 
 const Products = () => {
   const [products, setProducts] = useState([])

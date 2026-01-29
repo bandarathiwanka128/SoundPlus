@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://51.21.64.104:5000'
 
 const ProductDetail = ({ user, setCartCount }) => {
   const { id } = useParams()

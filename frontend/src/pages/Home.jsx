@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
 import { FaArrowRight, FaHeadphones, FaShieldAlt, FaTruck, FaUndo } from 'react-icons/fa'
 import './Home.css'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://51.21.64.104:5000'
 
 const Home = () => {
   const [featuredProducts, setFeaturedProducts] = useState([])

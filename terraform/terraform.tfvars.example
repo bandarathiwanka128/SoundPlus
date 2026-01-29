@@ -1,0 +1,64 @@
+# =============================================================================
+# SoundPlus++ Terraform Variables - EXAMPLE FILE
+# =============================================================================
+# IMPORTANT: Copy this file to terraform.tfvars and fill in your values
+# Command: cp terraform.tfvars.example terraform.tfvars
+#
+# WARNING: Never commit terraform.tfvars to git (contains secrets)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# AWS Credentials (REQUIRED - Get from AWS Console)
+# -----------------------------------------------------------------------------
+# Go to: AWS Console -> IAM -> Users -> Your User -> Security credentials
+# Create Access Key and copy values here
+
+aws_access_key = "YOUR_AWS_ACCESS_KEY_ID"
+aws_secret_key = "YOUR_AWS_SECRET_ACCESS_KEY"
+
+# -----------------------------------------------------------------------------
+# AWS Region
+# -----------------------------------------------------------------------------
+# Choose region closest to your users
+# Common options: us-east-1, us-west-2, eu-west-1, ap-south-1
+
+aws_region = "us-east-1"
+
+# -----------------------------------------------------------------------------
+# EC2 Key Pair (REQUIRED)
+# -----------------------------------------------------------------------------
+# This is the SSH key pair name from AWS Console
+# Go to: EC2 -> Key Pairs -> Create or use existing
+# Enter ONLY the name, not the .pem file path
+
+key_pair_name = "your-key-pair-name"
+
+# -----------------------------------------------------------------------------
+# Instance Settings
+# -----------------------------------------------------------------------------
+# t2.micro = Free tier (1 vCPU, 1GB RAM) - Good for testing
+# t2.small = (1 vCPU, 2GB RAM) - Better for production
+# t2.medium = (2 vCPU, 4GB RAM) - Recommended for production
+
+instance_type    = "t2.micro"
+root_volume_size = 20
+
+# -----------------------------------------------------------------------------
+# Project Settings
+# -----------------------------------------------------------------------------
+project_name = "soundplus"
+environment  = "prod"
+
+# -----------------------------------------------------------------------------
+# Security Settings
+# -----------------------------------------------------------------------------
+# IMPORTANT: For production, change allowed_ssh_cidr to your IP only!
+# Find your IP: https://whatismyip.com and add /32 (e.g., "203.0.113.50/32")
+
+allowed_ssh_cidr  = "0.0.0.0/0"  # WARNING: Open to all - change for production!
+allowed_http_cidr = "0.0.0.0/0"  # Public website - keep open
+
+# -----------------------------------------------------------------------------
+# Docker Settings
+# -----------------------------------------------------------------------------
+docker_compose_version = "v2.24.0"
