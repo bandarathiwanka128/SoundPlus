@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import Home from './pages/Home'
@@ -43,7 +43,7 @@ function App() {
           <Route path="/orders" element={<Orders user={user} />} />
         </Routes>
       </main>
-      <Footer />
+      {useLocation().pathname !== '/admin' && <Footer />}
     </div>
   )
 }
