@@ -22,7 +22,7 @@ pipeline {
                     docker --version
                     echo ""
                     echo "Docker Compose version:"
-                    docker compose version
+                    docker-compose version
                     echo ""
                     echo "Cleaning up any existing containers..."
                     docker rm -f soundplus-backend soundplus-frontend 2>/dev/null || true
@@ -77,13 +77,13 @@ pipeline {
                 echo '=== Starting Services ==='
                 sh '''
                     echo "Starting Docker containers..."
-                    docker compose up -d
+                    docker-compose up -d
                     
                     echo "Waiting 30 seconds for services to initialize..."
                     sleep 30
                     
                     echo "Checking container status..."
-                    docker compose ps
+                    docker-compose ps
                 '''
             }
         }
