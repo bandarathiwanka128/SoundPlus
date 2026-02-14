@@ -52,7 +52,7 @@ const Home = () => {
 
   const categories = [
     {
-      name: 'WireleSsSS Headphones',
+      name: 'WireleSsSS Headphonessssss',
       image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
       link: '/products?category=wireless'
     },
