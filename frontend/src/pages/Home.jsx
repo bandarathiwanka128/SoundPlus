@@ -96,7 +96,7 @@ const Home = () => {
       <section className="categories-section section">
         <div className="container">
           <div className="section-header">
-            <h2 className="section-title">Shop by Category</h2>
+            <h2 className="section-title">THiwanka bandara 5067</h2>
             <p className="section-subtitle">Find the perfect audio equipment for your needs</p>
           </div>
           <div className="categories-grid">
