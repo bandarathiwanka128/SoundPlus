@@ -30,7 +30,7 @@ const Home = () => {
   const features = [
     {
       icon: <FaTruck />,
-      title: 'Free Shipping',
+      title: 'THIWANKA ',
       description: 'Free shipping on all orders over $50'
     },
     {
